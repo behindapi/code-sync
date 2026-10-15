@@ -27,6 +27,7 @@
     "start:front": "react-scripts start",
     "start": "npm run build && npm run server:prod",
     "build": "react-scripts build",
+    "deploy:cloudflare": "node -e \"if (!process.env.REACT_APP_BACKEND_URL) { console.error('Set REACT_APP_BACKEND_URL before deploying'); process.exit(1); }\" && npm run build && npx --yes wrangler deploy",
     "server:dev": "nodemon server.js",
     "server:prod": "node server.js",
     "test": "react-scripts test",

@@ -80,17 +80,58 @@ Socket.IO event names and payloads are defined in `src/Actions.js`:
 
 The server enforces UUID room IDs, display-name and message bounds, Socket.IO packet and document limits, a 16-person room cap, per-IP room action limits, and per-socket document/message rate limits. A room link is a bearer invite: do not use it for confidential code. Presence labels are temporary and are not authenticated identities. The deployment must allow WebSocket upgrades and configure exact allowed origins. In-memory rooms are designed for a single server process; horizontal scaling requires shared durable state and a Socket.IO adapter, neither of which is included.
 
-## Deploy on a zero-budget host
+## Deployment
 
-Use a **single Render Free Web Service**, not a static-only site: the Express process serves the React build and keeps the Socket.IO connection on the same origin.
+The live setup uses Cloudflare Workers for the React frontend and Render for
+the Express and Socket.IO backend. The frontend connects to the backend over
+WebSocket across origins.
 
-1. Create a Web Service from this repository.
-2. Set the build command to `npm ci && npm run build`.
-3. Set the start command to `npm run server:prod`.
-4. Set `NODE_ENV=production` and `ALLOWED_ORIGINS=https://<your-service>.onrender.com` (replace with the exact public origin; include any custom origin if used).
-5. Render supplies `PORT`; the server binds to it and serves both the UI and Socket.IO.
+- Frontend: [codesync.sankalp010.workers.dev](https://codesync.sankalp010.workers.dev)
+- Backend: [code-sync-1iqn.onrender.com](https://code-sync-1iqn.onrender.com)
+- Backend health check: [code-sync-1iqn.onrender.com/healthz](https://code-sync-1iqn.onrender.com/healthz)
 
-Render currently documents inbound WebSocket support on web services. Its Free web services sleep after 15 minutes without inbound HTTP traffic or WebSocket messages, can take about a minute to wake, and receive 750 free instance hours per workspace per calendar month. Free services are limited to one instance, so the in-memory room model can be lost on sleep, restart, or deploy and is not shared across instances. Treat this as a hobby/demo deployment, not durable production hosting. Free-tier terms can change; review [Render Free instance limits](https://render.com/docs/free) and [Render WebSocket guidance](https://render.com/docs/websocket) before deploying.
+### Render backend
+
+Configure the Render Web Service from the repository root:
+
+- **Build command:** `npm ci && npm run build`
+- **Start command:** `npm run server:prod`
+- **Environment:**
+
+  ```text
+  NODE_ENV=production
+  ALLOWED_ORIGINS=https://codesync.sankalp010.workers.dev
+  REACT_APP_BACKEND_URL=https://code-sync-1iqn.onrender.com
+  ```
+
+Render supplies `PORT`; the server binds to it. `ALLOWED_ORIGINS` must contain
+the browser frontend's exact origin, including `https://` and without a
+trailing slash. If the frontend domain changes, update this value and restart
+or redeploy the backend.
+
+### Cloudflare frontend
+
+The repository's [wrangler.jsonc](wrangler.jsonc) publishes the React `build`
+directory as Worker assets and configures SPA fallback so direct room URLs
+such as `/editor/<room-id>` load correctly. The `deploy:cloudflare` script
+builds the frontend and deploys it with Wrangler. From the repository root:
+
+```bash
+npm ci
+npx --yes wrangler login
+REACT_APP_BACKEND_URL=https://code-sync-1iqn.onrender.com npm run deploy:cloudflare
+```
+
+The `REACT_APP_BACKEND_URL` value is embedded in the frontend during the
+production build. Wrangler deploys the Worker named `codesync`; the Cloudflare
+account must have the `codesync.sankalp010.workers.dev` subdomain available
+and assigned to that Worker. The current deployment was published directly
+with Wrangler. Automatic deployments on Git pushes are not configured.
+
+After deploying, check the frontend, open a room URL in a second browser, and
+confirm edits synchronize. The backend health endpoint should return
+`{"status":"ok"}`. Room and document state is held in memory by a single
+Node.js process, so restarts, deploys, or host sleep clear active rooms.
 
 ## Checks
 

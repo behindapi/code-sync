@@ -1,0 +1,145 @@
+Deploy Code Sync on Render (Web Service)
+========================================
+
+This deployment uses two services:
+
+- Frontend on Cloudflare Workers: https://codesync.sankalp010.workers.dev
+- Node.js and Socket.IO backend on Render:
+  https://code-sync-1iqn.onrender.com
+
+The React app is built for Cloudflare and connects to the Render backend using
+REACT_APP_BACKEND_URL. Render runs Express and Socket.IO. The Express server
+also serves its local build directory, but the public frontend is the
+Cloudflare deployment.
+
+Before you start
+----------------
+1. Push this project to a GitHub, GitLab, or Bitbucket repository connected to
+   your Render account.
+2. Confirm the repository includes package.json and package-lock.json.
+3. The service uses Node.js 18 or newer. The repository README recommends
+   Node.js 20 LTS.
+
+Deploy the backend on Render
+----------------------------
+1. Sign in to Render and choose New +, then Web Service.
+2. Connect the repository containing Code Sync and select the branch to deploy.
+3. Enter a service name, such as code-sync. Choose the region nearest your
+   expected users. This deployment's assigned backend URL is
+   https://code-sync-1iqn.onrender.com.
+4. Set Runtime to Node.
+5. Set the Root Directory to the repository root. Leave it blank if the app is
+   at the root of the repository.
+6. Set Build Command to:
+
+   npm ci && npm run build
+
+7. Set Start Command to:
+
+   npm run server:prod
+
+8. Choose an instance plan. Render's Free plan is suitable for a demo, subject
+   to Render's current limits and availability.
+9. Before creating the service, add these environment variables in the
+   Environment section:
+
+   NODE_ENV = production
+   ALLOWED_ORIGINS = https://codesync.sankalp010.workers.dev
+   REACT_APP_BACKEND_URL = https://code-sync-1iqn.onrender.com
+
+   ALLOWED_ORIGINS must list the browser frontend origin, not the Render API
+   URL. Do not include a trailing slash. If you later add another frontend
+   domain, include each exact browser origin as a comma-separated value, for
+   example:
+
+   https://codesync.sankalp010.workers.dev,https://code-sync.example.com
+
+   Render supplies PORT automatically. Do not set it manually.
+
+10. Create the Web Service. Render will install locked dependencies, build the
+    React client (needed because Express serves the build directory too), and
+    start the Express server. The app listens on Render's
+    supplied PORT and binds to 0.0.0.0; do not hard-code a port in Render.
+
+Configure and deploy the Cloudflare Worker frontend
+----------------------------------------------------
+The repository includes wrangler.jsonc. It tells Wrangler to publish the
+Create React App build directory as Worker static assets and serve index.html
+for React Router paths such as /editor/<room-id>.
+
+1. In Cloudflare, create or select the Worker named codesync, then connect this
+   repository using Workers Builds. Select the branch to deploy and the
+   repository root as the project root.
+2. Set the build/deploy command to:
+
+   npm ci && npm run deploy:cloudflare
+
+   This runs the React production build and then `wrangler deploy`, which
+   publishes the `build` directory using wrangler.jsonc. No separate output
+   directory setting is needed for Workers Builds.
+3. Add this build environment variable in Cloudflare:
+
+   REACT_APP_BACKEND_URL = https://code-sync-1iqn.onrender.com
+
+   The deploy script checks that this variable is present before building.
+   Create React App embeds REACT_APP_* values into the frontend at build time.
+   Redeploy the Cloudflare frontend after changing this value. Do not add a
+   trailing slash.
+4. Configure Workers Builds with a Cloudflare API token that can deploy Workers
+   and access the target account. Keep the token secret; do not commit it to
+   this repository. If Wrangler requests an account selection, use the account
+   that owns the sankalp010.workers.dev subdomain.
+5. Deploy the Cloudflare Worker and confirm its assigned public domain is
+   https://codesync.sankalp010.workers.dev.
+6. For local CLI deployment, authenticate Wrangler for the same account, set
+   REACT_APP_BACKEND_URL in the shell before building, and run:
+
+   npm ci
+   npm run deploy:cloudflare
+
+   In a local shell, the build variable can be set for that command with:
+
+   REACT_APP_BACKEND_URL=https://code-sync-1iqn.onrender.com npm run deploy:cloudflare
+
+Verify the deployment
+---------------------
+1. Wait for the first deploy to finish and show Live in the Render dashboard.
+2. Open the frontend at https://codesync.sankalp010.workers.dev.
+3. Check the backend health endpoint at
+   https://code-sync-1iqn.onrender.com/healthz.
+   It should return: {"status":"ok"}
+4. Create a room, copy its invite link, and open it in a second browser or
+   private window. Confirm both clients join and edits synchronize. This
+   checks the cross-origin Socket.IO connection and WebSocket upgrade to
+   Render. The Render logs should show no rejected-origin errors.
+5. If the service fails during startup, inspect its Render logs. Production
+   startup intentionally stops if ALLOWED_ORIGINS is missing or empty.
+
+Updating the deployment
+-----------------------
+Push a change to the connected branch. Render will run the build command and
+restart the service with the new build. You can also use Manual Deploy in the
+Render dashboard to deploy the latest commit.
+
+Operational notes
+-----------------
+- Rooms and documents are stored in memory by one Node.js process. Deploys,
+  restarts, host sleep, or process replacement clear that state. This setup is
+  intended for demos and small sessions, not durable storage.
+- Use a single instance. Multiple instances do not share room state and may
+  prevent participants from reaching the same room.
+- Anyone with a room link can join; accounts and identity verification are not
+  included. Avoid using room links for confidential code.
+- If using Render Free, the service may sleep when idle and take time to wake.
+  Review Render's current Free Web Service and WebSocket policies before
+  relying on the service, since plan limits can change.
+- If the frontend moves to a custom domain, update Render's ALLOWED_ORIGINS
+  with that exact HTTPS origin, then redeploy or restart the backend. Keep
+  REACT_APP_BACKEND_URL set to the backend URL in the Cloudflare build settings.
+
+Useful project commands
+-----------------------
+Build the React client:       npm run build
+Start the production server:  npm run server:prod
+Run server tests:            npm run test:server
+Run client tests:            npm run test:ci -- --runInBand

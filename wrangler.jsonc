@@ -1,0 +1,8 @@
+{
+  "name": "codesync",
+  "compatibility_date": "2026-10-15",
+  "assets": {
+    "directory": "./build",
+    "not_found_handling": "single-page-application"
+  }
+}
