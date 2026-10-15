@@ -1,0 +1,5 @@
+/* App-wide baseline; page and workspace presentation lives in RoomPage.css. */
+:root { color-scheme: dark; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: #212529; }
+html { min-width: 320px; min-height: 100%; }
+body { min-width: 320px; margin: 0; -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
+#root { min-height: 100vh; }
